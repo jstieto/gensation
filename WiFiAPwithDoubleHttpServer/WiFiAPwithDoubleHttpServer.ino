@@ -11,8 +11,8 @@
  * - Choose the COM-Port the stick conncted to (See Menu: Tools -> Port). Hint: Johannes derived his stick names from the COM-Port which each respective stick automatically connected to.
  */
 //String stickname = "3";
-//String stickname = "4";
-String stickname = "11";
+String stickname = "4";
+//String stickname = "11";
 
 /* IMPORTANT 2/2 
  * - The ssid must be the name of the stick which should act as accesspoint.
