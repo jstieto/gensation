@@ -1,0 +1,34 @@
+DB läuft auf
+	dev.pegelalarm.at
+	
+Webserver läuft auf 
+	Checkapp-Server
+	
+	
+
+__PG-Node__
+  https://node-postgres.com/features/queries
+
+
+
+__DB stuff__
+CREATE schema gensation
+
+drop table gensation.signals
+
+CREATE TABLE gensation.signals (
+    id serial,
+    username varchar(255),
+    counter integer,
+    ts TIMESTAMP DEFAULT NOW()
+);
+
+SELECT * FROM gensation.signals order by ts desc
+
+insert into gensation.signals (username, counter) values ('john', 28)
+
+insert into gensation.signals (username, counter) values ('walter', 32)
+
+
+
+SELECT counter, ts FROM gensation.signals where username = 'walter' AND counter = (select max(counter) from gensation.signals where username = 'walter')

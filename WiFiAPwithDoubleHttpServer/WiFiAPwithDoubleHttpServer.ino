@@ -8,7 +8,7 @@
 
 /* IMPORTANT 1/2
  * - Uncomment the stick which you would like to place your code on.
- * - Choose the COM-Port the stick conncted to (See Menu: Tools -> Port). Hint: Johannes derived his stick names from the COM-Port which each respective stick automatically connected to.
+ * - Choose the COM-Port the stick is conncted to (See Menu: Tools -> Port). Hint: Johannes derived his stick names from the COM-Port which each respective stick automatically connected to. It helps to write the name/number on the stick ;-)
  */
 //String stickname = "3";
 String stickname = "4";
@@ -33,7 +33,9 @@ const int port = 80;
 bool vibrationClickStatusOn = false; 
 String myIp = "";
 String enqueuedUrlPath = "";
-String broadcastListenerIPs[MAX_BROADCAST_LISTENERS] ;
+String broadcastListenerIPs[MAX_BROADCAST_LISTENERS];
+String broadcastListenerSticks[MAX_BROADCAST_LISTENERS];
+
 WiFiServer server(port);
 
 void setup() {
@@ -41,6 +43,7 @@ void setup() {
   M5.begin();
   delay(10);
   clearScreen(BLUE);
+  M5.Lcd.setTextSize(1);
   M5.Lcd.println("Ready #" + stickname);
   
   Serial.begin(115200);
@@ -54,11 +57,11 @@ void setup() {
   server.begin();
   Serial.println("HTTP server started on port " + port);
 
-  pinMode( analogOutPin , OUTPUT);  // Must be a PWM pin. This is probably optional.
+  pinMode(analogOutPin , OUTPUT);  // Must be a PWM pin. This is probably optional.
   
-  for (int i=0; i<MAX_BROADCAST_LISTENERS; i++) 
-    broadcastListenerIPs[i]="";
+  initRegisteredIps();
 }
+
 
 
 void loop() {
@@ -69,32 +72,28 @@ void loop() {
     if (vibrationClickStatusOn == false) { 
       vibrationClickStatusOn = true; 
       String cmd = "broadcastVibration?status=ON&sourceIp="+myIp+"&sourceStickname="+stickname;
-      if (amIaccesspoint())
-        broadcast(cmd);
-      else
-        simpleHttpRequest(xx + "http://" + GATEWAY_IP + "/" + cmd);
+      broadcast(cmd);    
     }
   }
   else /* if (M5.BtnA.isReleased()) */ {
     if (vibrationClickStatusOn == true) {      
       vibrationClickStatusOn = false;     
-      String cmd = "broadcastVibration?status=OFF&sourceIp="+myIp+"&sourceStickname="+stickname;      // sourceIP must be sent because this signal must also be broadcast from the AP to all clients except the sourceIP.
-      if (amIaccesspoint())
-        broadcast(cmd);
-      else
-        simpleHttpRequest(xx + "http://" + GATEWAY_IP + "/" + cmd);
+      String cmd = "broadcastVibration?status=OFF&sourceIp="+myIp+"&sourceStickname="+stickname;
+      broadcast(cmd);      
     }
   }
 
   if (M5.BtnB.wasPressed()) {
-    Serial.println("Button B was pressed");    
-    
-    // Send button click event
-    String cmd = "broadcastButtonClick?buttonName=B&sourceIp="+myIp+"&sourceStickname="+stickname;
-    if (amIaccesspoint())
-      broadcast(cmd);
-    else
-      simpleHttpRequest(xx + "http://" + GATEWAY_IP + "/" + cmd);
+    Serial.println("Button B was pressed");
+    //String cmd = "broadcastButtonClick?buttonName=B&sourceIp="+myIp+"&sourceStickname="+stickname;
+    //broadcast(cmd);  
+
+    initRegisteredIps();
+    registerMeForBroadcastRemotely();  
+
+    clearScreen(BLUE);
+    M5.Lcd.println("Registered IPs:");    
+    M5.Lcd.println(getRegisteredIpsFormatted("\n"));
   }
 
   
@@ -116,22 +115,23 @@ void loop() {
             client.println("Content-type:text/html");
             client.println(); // blank line -> end of http-header
 
-            // Relevant for gateway device only
-            if (header.startsWith("GET /registerBroadcastListener")) {                  
-              String newPartnerIp = getUrlParameter(header, "sourceIp");
+            if (header.startsWith("GET /registerMe")) {                  
+              String sourceIp = getUrlParameter(header, "sourceIp");
               String sourceStickname = getUrlParameter(header, "sourceStickname");
-              registerBroadcastIP(newPartnerIp);
-              Serial.println(xx + "      --> Ip registered for broadcasts: " + newPartnerIp);
+              saveBroadcastListenerIPLocally(sourceIp, sourceStickname);
+              Serial.println(xx + "      --> Ip registered for broadcasts: " + sourceIp);
+              M5.Lcd.setTextSize(1);
               M5.Lcd.println(xx + "New stick #" + sourceStickname);
+              if (amIaccesspoint())
+                client.println(getRegisteredIpsFormatted(";"));
             }
             else
-            // Relevant for any device
             if (header.startsWith("GET /broadcastButtonClick")) {
-              String clickedButtonName = getUrlParameter(header, "buttonName");              
+              String clickedButtonName = getUrlParameter(header, "buttonName");
+              String sourceStickname = getUrlParameter(header, "sourceStickname");
               Serial.println(xx + "      --> Partner clicked button " + clickedButtonName);
-              M5.Lcd.println(xx + " partnerClick " + clickedButtonName);
-              if (amIaccesspoint())                
-                enqueueBroadcast("broadcastButtonClick?buttonName=B&sourceIp=" + myIp + "&sourceStickname="+stickname);
+              M5.Lcd.setTextSize(1);
+              M5.Lcd.println(xx + "Btn" + clickedButtonName + " by " + sourceStickname);
             }
             else       
             if (header.startsWith("GET /broadcastVibration")) {
@@ -145,15 +145,13 @@ void loop() {
                 M5.Lcd.setTextColor(WHITE);
                 M5.Lcd.setTextSize(4);
                 M5.Lcd.println(xx + " " + sourceStickname);
+                M5.Lcd.setTextSize(1);
               }
-              analogWrite(analogOutPin, vibrationStatus?255:0);
-              if (amIaccesspoint())
-                enqueueBroadcast("broadcastVibration?status=" + vibrationStatusStr + "&sourceIp=" + sourceIp + "&sourceStickname="+sourceStickname);
+              analogWrite(analogOutPin, vibrationStatus?255:0);              
             }
             else
               Serial.println(xx + "Command not recognized: '" + header + "'");
 
-            client.print("Yeah!<br>");
             client.println(); // The HTTP response ends with another blank line:
             break;  // break out of the while loop:
           } else {    // if you got a newline, then clear currentLine:
@@ -170,14 +168,32 @@ void loop() {
     Serial.println("Client Disconnected.");
   }
   
-  dequeueBroadcast();
-
-
   // if e.g. the AP needs to reboot and we loose Wifi -> we need to reconnect + re-register our IP for broadcasts
   if (!amIaccesspoint() && WiFi.status() != WL_CONNECTED) {
     Serial.println("I am NOT the accesspoint and lost wifi -> reconnect!");
     reconnectToWifi();
   }    
+}
+
+String getRegisteredIpsFormatted(String delimiter) {
+  String ret="";
+  for (int i=0; i < MAX_BROADCAST_LISTENERS; i++) {
+    String ip = broadcastListenerIPs[i];
+    if (ip.length() > 0)
+      ret+=ip+delimiter;
+  }
+  return ret;
+}
+
+void initRegisteredIps() {
+  for (int i=0; i<MAX_BROADCAST_LISTENERS; i++) {
+    broadcastListenerIPs[i]="";
+    broadcastListenerSticks[i]="";
+  }
+  if (!amIaccesspoint()) {
+    broadcastListenerIPs[0]=GATEWAY_IP;
+    broadcastListenerSticks[0]=ssid;
+  }
 }
 
 void clearScreen(int color) {
@@ -194,7 +210,8 @@ void startWifiAccessPoint() {
 
   WiFi.softAP(ssidChr /*, password*/);
   Serial.println("Started WIFI accesspoint SSID " + ssid);  
-  M5.Lcd.println("Accesspiont/SSID '" + ssid + "' started");
+  M5.Lcd.setTextSize(1);
+  M5.Lcd.println("AP/SSID " + ssid + " started");
   
   myIp = WiFi.softAPIP().toString();
   Serial.print("AP IP address: " + myIp);  
@@ -202,28 +219,56 @@ void startWifiAccessPoint() {
 
 void reconnectToWifi() {
   connectToWifi();
-  registerForBroadcast();
+  initRegisteredIps();
+  registerMeForBroadcastRemotely();  
 }
 
 void connectToWifi() {
   const char *ssidChr = ssid.c_str();
   WiFi.begin(ssidChr/*, password*/);  
+  M5.Lcd.setTextSize(1);
   M5.Lcd.print("Searching for WiFi" + ssid);    
-  while (WiFi.status() != WL_CONNECTED) {
-    //keep trying every 4 secs
-    delay(4000);
+  while (WiFi.status() != WL_CONNECTED) {    
+    clearScreen(BLACK);
     Serial.println("Searching for Wifi SSID " + ssid);
-    M5.Lcd.print(".");    
+    M5.Lcd.println("Searching Wifi");
+    M5.Lcd.print(".");    delay(1000);
+    M5.Lcd.print(".");    delay(1000);
+    M5.Lcd.print(".");    delay(1000);
+    M5.Lcd.print(".");    delay(1000);
   }  
   clearScreen(BLACK);
   Serial.println("Connected to the WiFi SSID " + ssid);
   M5.Lcd.println("Wifi connected!");
 }
 
-void registerForBroadcast() {
+void registerMeForBroadcastRemotely() {
   myIp = WiFi.localIP().toString();
-  Serial.println(xx + "My local IP is " + myIp);
-  simpleHttpRequest(xx + "http://" + GATEWAY_IP + "/registerBroadcastListener?sourceIp=" + myIp + "&sourceStickname=" + stickname);
+  Serial.println(xx + "My local IP is " + myIp);  
+  String payload = simpleHttpRequest(xx + "http://" + GATEWAY_IP + "/registerMe?sourceIp=" + myIp + "&sourceStickname=" + stickname);   
+  // The payload contains a list of all IPs registered at the gateway device. Let's store the IPs locally!
+  Serial.println("The following IPs are registered at the gateway: '" + payload + "'");
+  if (payload.length() > 0) {
+    int startIdx = 0;
+    int endIdx=payload.indexOf(";", startIdx);
+    while (endIdx > 0) {
+      //Serial.println(xx + "StartIdx=" + startIdx + "; EndIdx=" + endIdx);
+      String ip = payload.substring(startIdx, endIdx);
+      Serial.println(" Registered at gateway: " + ip);
+      if (!myIp.equalsIgnoreCase(ip))
+        saveBroadcastListenerIPLocally(ip, "");
+      else 
+        Serial.println(" I'm not adding myself/my IP to my local broadcastIP-List");
+      startIdx = endIdx+1;
+      endIdx=payload.indexOf(";", startIdx);
+    }
+  }
+  else
+    Serial.println("No payload was received when I registered for broadcasts!");
+    
+  broadcast("registerMe?sourceIp=" + myIp + "&sourceStickname="+stickname, GATEWAY_IP);  // Let everybody know
+  
+  M5.Lcd.setTextSize(1);
   M5.Lcd.println("Sent my IP to Gateway");
 }
 
@@ -234,11 +279,12 @@ void broadcast(String urlPath) {
 void broadcast(String urlPath, String excludedIp) {
   Serial.println(xx + "Starting broadcast");
   if (excludedIp.length() > 0)
-    Serial.println(xx + "  > Excluding IP " + excludedIp + " from broadcast");
+    Serial.println(xx + "Excluding IP " + excludedIp + " from broadcast");
   Serial.println("Registered IPs for broadcasts are:");
   for (int i=0; i < MAX_BROADCAST_LISTENERS; i++) {
     String ip = broadcastListenerIPs[i];
-    Serial.println(xx + " BroadcastIP[" + i + "]: '" + ip + "'");
+    String stickname = broadcastListenerSticks[i];
+    Serial.println(xx + " bcIP[" + i + "]: '" + ip + "' = " + stickname);
   }
   
   for (int i=0; i < MAX_BROADCAST_LISTENERS; i++) {
@@ -249,7 +295,7 @@ void broadcast(String urlPath, String excludedIp) {
         simpleHttpRequest(xx + "http://" + ip + "/" + urlPath);      
       }
       else
-        Serial.println("The found ip '" + ip + "' is excluded!");
+        Serial.println("Not sending to '" + ip + "' as it is excluded!");
     } 
   }    
 }
@@ -260,49 +306,25 @@ bool amIaccesspoint() {
 }
 
 
-/*
- *  Checks Wifi connection before sending a http-request. 
- *  -> Tries to reconnect to Wifi if not connected.
-*/
-/*
-void checkedHttpRequest(String url) {
-  Serial.println(xx + "Trying to call '" + url + "'");
-  //check whether the connection is still alive
-
-  if (amIaccesspoint())
-    simpleHttpRequest(url);
-  else {    
-    if ((WiFi.status() == WL_CONNECTED)) {
-      //Serial.println("Wifi connected -> Sending http request!");
-      simpleHttpRequest(url);
-    }
-    else {
-      Serial.println("Wifi NOT connected -> Http request is not sent!");
-      //if is disconnected -> try to reconnect to WiFi
-      reconnectToWifi(); 
-    }
-  }
-}
-*/
-
-// This call sends an http request - without any checks
-void simpleHttpRequest(String url) {  
+String simpleHttpRequest(String url) {  
   HTTPClient http;
-  Serial.println(xx + "URL is " + url);
+  Serial.println("httpRequest: " + url);
+  //http.setTimeout(3000);
   http.begin(url);
-  //send httpRequest and check response code
-  int httpCode = http.GET();
+  String payload="";
+  int httpCode = http.GET();  
   if (httpCode > 0) {
-      String payload = http.getString();
+      payload = http.getString();
       Serial.println(xx + "Got httpCode: " + httpCode);
-      Serial.println(xx + "Got payload: " + payload);
+      //Serial.println(xx + "Got payload: " + payload);
   }
   else {
     //httpCode is negative -> guess the request failed :P
-    Serial.println("Error on HTTP request");
+    Serial.println("Error on HTTP request. httpCode=" + httpCode);
   }
   //stop the connection to free resources
   http.end();
+  return payload;
 }
 
 
@@ -321,7 +343,8 @@ String getUrlParameter(String header, String paramName) {
 }
 
 
-void registerBroadcastIP(String partnerIp) {
+void saveBroadcastListenerIPLocally(String partnerIp, String partnerStickname) {
+  Serial.println("Trying to save IP " + partnerIp + " to local broadcastListeners!");
   int firstAvailableIPslot=-1;
   for (int i=0; i < MAX_BROADCAST_LISTENERS; i++) {
     String ip = broadcastListenerIPs[i];    
@@ -329,27 +352,20 @@ void registerBroadcastIP(String partnerIp) {
       firstAvailableIPslot = i;
       break;    
     }
-    else if (ip.equals(partnerIp))  // -> the new partner's ip is already registered. Do not register again.
+    else if (ip.equals(partnerIp)) {  // -> the new partner's ip is already registered. Do not register again.
+      firstAvailableIPslot=-2;
       break;  
+    }
   }
 
-  if (firstAvailableIPslot >= 0) 
+  if (firstAvailableIPslot >= 0) {
     broadcastListenerIPs[firstAvailableIPslot] = partnerIp;
-  else
-    Serial.println("Could not store a partner's IP to the broadcastlisteners since none is available or it was registered before already!");  
-}
-
-
-void enqueueBroadcast(String urlPath) {
-  Serial.println("Enqueueing the broadcast urlPath '" + urlPath + "'");
-  enqueuedUrlPath = urlPath;
-}
-
-void dequeueBroadcast() {
-  if (enqueuedUrlPath.length() > 0) {
-    Serial.println("Dequeueing the broadcast urlPath '" + enqueuedUrlPath + "'");
-    String excludeIp = getUrlParameter(enqueuedUrlPath, "sourceIp");
-    broadcast(enqueuedUrlPath, excludeIp);
-    enqueuedUrlPath = "";    
+    Serial.println(" Saved IP " + partnerIp + " to local broadcastListeners on index=" + firstAvailableIPslot);
+  }
+  else {
+    if (firstAvailableIPslot == -1)
+      Serial.println(" Could not save IP " + partnerIp + " to the local broadcastListeners since there was no free slot!");
+    else
+      Serial.println(" Could not save IP " + partnerIp + " to the local broadcastListeners since it was registered before already!");
   }
 }
