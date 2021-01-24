@@ -3,10 +3,9 @@
 This project contains multiple programs for M5Stick handling in Gensation.
 
 # WiFiAPwithDoubleHttpServer
-Used to allow m:n communication between a fixed number of M5StickCs.
-One of the sticks opens a Wifi accesspoint with a fixed IP. The other sticks try to connect to this WIFI AP.
-All sticks open a webserver on port 80.
-The program servers 3 basic functionalities which can be en-/disabled at compile time:
+This is the main program for M5StickC. It can be used to allow m:n communication between a fixed number of M5StickCs.
+One of the sticks opens a Wifi accesspoint with a fixed IP. The other sticks try to connect to this WIFI AP. All sticks open a webserver on port 80.
+This allows 3 basic functionalities which can be en-/disabled at compile time:
 1) Send the angle of the stick to all other registered sticks. This is an integration (and extension) of the Prost2gether program. See the description below for usage details!
 2) Send a signal to all other registered sticks and let them vibrate when button-A is clicked
 3) Show all registered sticks on the screen when button-B is clicked
