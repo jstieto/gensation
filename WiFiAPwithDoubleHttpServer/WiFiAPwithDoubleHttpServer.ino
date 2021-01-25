@@ -1,10 +1,10 @@
-ation#include <WiFi.h>
-#include <WiFiClient.h>
+#include <WiFi.h>           
+#include <WiFiClient.h> 
 #include <WiFiAP.h>
 #include <M5StickC.h>
 #include <HTTPClient.h>
-#include <analogWrite.h>
-#include <Kalman.h>
+#include <analogWrite.h>    // ESP32 AnalogWrite       by ERROPiX                    v 0.1.0
+#include <Kalman.h>         // Kalman Filter Library   by Kristian Lauszus (TKJ...)  v 1.0.2
 
 
 /* IMPORTANT 1/3  - Stick names
