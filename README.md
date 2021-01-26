@@ -1,6 +1,7 @@
 # gensation
 
 This project contains multiple programs for M5Stick handling in Gensation.
+The main application is WiFiAPwithDoubleHttpServer.
 
 # WiFiAPwithDoubleHttpServer
 This is the main program for M5StickC. It can be used to allow m:n communication between a fixed number of M5StickCs.

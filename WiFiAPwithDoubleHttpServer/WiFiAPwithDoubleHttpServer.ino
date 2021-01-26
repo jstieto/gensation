@@ -12,6 +12,7 @@
  * - Choose the COM-Port the stick is conncted to (See Menu: Tools -> PORT). Hint: Johannes derived his stick names from the COM-PORT which each respective stick automatically connected to. 
  *   This makes testing a lot easier. It also helps to write the name/number on the stick ;-)
  */
+//
 String stickname = "3";
 //String stickname = "4";
 //String stickname = "11";
@@ -36,7 +37,7 @@ const bool DRAW_DRINKING_ANGLE_LOCALLY = false;       // defaults to false; Main
 
 /* General default constants
  */ 
-const int BROADCAST_DRINKING_ANGLE_MIN_ANGLE = 10;             // As soon as this angle is met -> broadcast 
+const int BROADCAST_DRINKING_ANGLE_MIN_ANGLE = 10;            // As soon as this angle is met -> broadcast 
 const int BROADCAST_DRINKING_ANGLE_MIN_ANGLE_CHANGE = 5;      // Only resend a broadcast if the measured angle changed by at least this value
 const int MAX_BROADCAST_LISTENERS = 5;
 const int ANALOG_OUTPIN = 26;                                 // 0 (G0), 26 (G26) works 36 (G36) does not work with vibration motor
@@ -157,7 +158,7 @@ void loop() {
     }
     //else
     //  Serial.println("Vibration is on -> I cannot use the gyro!");
-  } else
+  }
   if (BROADCAST_VIBRATION_ON_BTN_A) {
     M5.update();   
     if (M5.BtnA.isPressed()) {    
@@ -607,6 +608,7 @@ double getRad(double degrees) {
 }
 
 void setBrightness(int brightnessPercent) {
+  
   // Method 1
   if (brightnessPercent == 0)
     M5.begin(0,1,1);  // disable LCD      
@@ -616,7 +618,8 @@ void setBrightness(int brightnessPercent) {
   // Method 2
   M5.Axp.SetLDO2(brightnessPercent!=0);
   M5.Axp.SetLDO3(brightnessPercent!=0);
-
+  
+  
   // Method 3
   float breath = 7 + ((float)(8*brightnessPercent))/100;
   M5.Axp.ScreenBreath(breath);         // takes a value from 7 to 15
